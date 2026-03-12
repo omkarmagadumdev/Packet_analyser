@@ -1,0 +1,9 @@
+js/node_modules/
+*.log
+
+# Generated packet captures and analyzer outputs
+output*.pcap
+live_*.pcap
+
+# Keep the provided sample capture under version control
+!test_dpi.pcap

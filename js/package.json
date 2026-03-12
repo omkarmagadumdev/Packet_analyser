@@ -1,0 +1,11 @@
+{
+  "name": "packet-analyzer-js",
+  "version": "1.0.0",
+  "description": "JavaScript port of Packet Analyzer DPI engine",
+  "main": "src/main_dpi.js",
+  "scripts": {
+    "start:dpi": "node src/main_dpi.js",
+    "start:parser": "node src/main_simple.js"
+  },
+  "license": "UNLICENSED"
+}
