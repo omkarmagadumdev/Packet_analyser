@@ -38,7 +38,9 @@ function buildClassificationSnapshot() {
     appCounts: Object.fromEntries(appCounts.entries()),
     totalClassified,
     totalUnknown,
-    topDomains: [...domainCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)
+    topDomains: [...domainCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20),
+    packetAppCounts: fp.getStats().packet_app_counts,
+    detectedDomains: fp.getStats().detected_domains
   };
 }
 

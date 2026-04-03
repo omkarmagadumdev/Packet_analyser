@@ -681,10 +681,13 @@ const AppType = {
 **sniToAppType function:**
 ```js
 function sniToAppType(sni) {
-    if (sni.find("youtube") != -1) 
+    const host = normalizeHostname(sni);
+    if (matchesDomain(host, "youtube.com") || host.includes("googlevideo"))
         return AppType.YOUTUBE;
-    if (sni.find("facebook") != -1) 
+    if (matchesDomain(host, "facebook.com") || matchesDomain(host, "fbcdn.net"))
         return AppType.FACEBOOK;
+    if (matchesDomain(host, "x.com") || matchesDomain(host, "t.co"))
+        return AppType.TWITTER;
     // ... more patterns
 }
 ```

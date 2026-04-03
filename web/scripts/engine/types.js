@@ -94,27 +94,65 @@ function fiveTupleHash(tuple) {
   return hash >>> 0;
 }
 
+function normalizeHostname(value) {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .replace(/\.+$/, "")
+    .replace(/^\[|\]$/g, "")
+    .trim();
+}
+
+function matchesDomain(host, domain) {
+  const normalizedHost = normalizeHostname(host);
+  const normalizedDomain = normalizeHostname(domain);
+  if (!normalizedHost || !normalizedDomain) return false;
+  return normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`);
+}
+
+function matchesAnyDomain(host, domains) {
+  return domains.some((domain) => matchesDomain(host, domain));
+}
+
+function matchesAnyFragment(host, fragments) {
+  const normalizedHost = normalizeHostname(host);
+  if (!normalizedHost) return false;
+  return fragments.some((fragment) => normalizedHost.includes(fragment.toLowerCase()));
+}
+
 function sniToAppType(sni) {
   if (!sni) return AppType.UNKNOWN;
-  const value = sni.toLowerCase();
+  const value = normalizeHostname(sni);
 
-  if (value.includes("youtube") || value.includes("youtubei") || value.includes("googlevideo") || value.includes("ytimg") || value.includes("ytstatic") || value.includes("youtu.be") || value.includes("yt3.ggpht")) return AppType.YOUTUBE;
-  if (value.includes("google") || value.includes("gstatic") || value.includes("googleapis") || value.includes("ggpht") || value.includes("gvt1")) return AppType.GOOGLE;
-  if (value.includes("instagram") || value.includes("cdninstagram")) return AppType.INSTAGRAM;
-  if (value.includes("whatsapp") || value.includes("wa.me")) return AppType.WHATSAPP;
-  if (value.includes("facebook") || value.includes("fbcdn") || value.includes("fb.com") || value.includes("fbsbx") || value.includes("meta.com")) return AppType.FACEBOOK;
-  if (value.includes("twitter") || value.includes("twimg") || value.includes("x.com") || value.includes("t.co")) return AppType.TWITTER;
-  if (value.includes("netflix") || value.includes("nflxvideo") || value.includes("nflximg")) return AppType.NETFLIX;
-  if (value.includes("amazon") || value.includes("amazonaws") || value.includes("cloudfront") || value.includes("aws")) return AppType.AMAZON;
-  if (value.includes("microsoft") || value.includes("msn.com") || value.includes("office") || value.includes("azure") || value.includes("live.com") || value.includes("outlook") || value.includes("bing")) return AppType.MICROSOFT;
-  if (value.includes("apple") || value.includes("icloud") || value.includes("mzstatic") || value.includes("itunes")) return AppType.APPLE;
-  if (value.includes("telegram") || value.includes("t.me")) return AppType.TELEGRAM;
-  if (value.includes("tiktok") || value.includes("tiktokcdn") || value.includes("musical.ly") || value.includes("bytedance")) return AppType.TIKTOK;
-  if (value.includes("spotify") || value.includes("scdn.co")) return AppType.SPOTIFY;
-  if (value.includes("zoom")) return AppType.ZOOM;
-  if (value.includes("discord") || value.includes("discordapp")) return AppType.DISCORD;
-  if (value.includes("github") || value.includes("githubusercontent")) return AppType.GITHUB;
-  if (value.includes("cloudflare") || value.includes("cf-")) return AppType.CLOUDFLARE;
+  if (
+    matchesAnyDomain(value, ["youtube.com", "youtubei.googleapis.com", "googlevideo.com", "ytimg.com", "ytstatic.com", "youtu.be", "yt3.ggpht.com"]) ||
+    matchesAnyFragment(value, ["youtube", "youtubei", "googlevideo", "ytimg", "ytstatic", "yt3.ggpht"])
+  ) return AppType.YOUTUBE;
+  if (
+    matchesAnyDomain(value, ["google.com", "gstatic.com", "googleapis.com", "ggpht.com", "gvt1.com"]) ||
+    matchesAnyFragment(value, ["googleapis", "gstatic", "ggpht", "gvt1"])
+  ) return AppType.GOOGLE;
+  if (matchesAnyDomain(value, ["instagram.com", "cdninstagram.com"]) || matchesAnyFragment(value, ["instagram", "cdninstagram"])) return AppType.INSTAGRAM;
+  if (matchesAnyDomain(value, ["whatsapp.com", "wa.me"]) || matchesAnyFragment(value, ["whatsapp"])) return AppType.WHATSAPP;
+  if (matchesAnyDomain(value, ["facebook.com", "fbcdn.net", "fb.com", "fbsbx.com", "meta.com"]) || matchesAnyFragment(value, ["facebook", "fbcdn", "fbsbx"])) return AppType.FACEBOOK;
+  if (matchesAnyDomain(value, ["twitter.com", "twimg.com", "x.com", "t.co"]) || matchesAnyFragment(value, ["twitter", "twimg"])) return AppType.TWITTER;
+  if (matchesAnyDomain(value, ["netflix.com", "nflxvideo.net", "nflximg.net"]) || matchesAnyFragment(value, ["netflix", "nflxvideo", "nflximg"])) return AppType.NETFLIX;
+  if (
+    matchesAnyDomain(value, ["amazon.com", "amazonaws.com", "cloudfront.net"]) ||
+    matchesAnyFragment(value, ["amazon", "amazonaws", "cloudfront"])
+  ) return AppType.AMAZON;
+  if (
+    matchesAnyDomain(value, ["microsoft.com", "msn.com", "office.com", "azure.com", "live.com", "outlook.com", "bing.com"]) ||
+    matchesAnyFragment(value, ["microsoft", "office", "azure", "outlook"])
+  ) return AppType.MICROSOFT;
+  if (matchesAnyDomain(value, ["apple.com", "icloud.com", "mzstatic.com", "itunes.apple.com"]) || matchesAnyFragment(value, ["apple", "icloud", "mzstatic", "itunes"])) return AppType.APPLE;
+  if (matchesAnyDomain(value, ["telegram.org", "t.me"]) || matchesAnyFragment(value, ["telegram"])) return AppType.TELEGRAM;
+  if (matchesAnyDomain(value, ["tiktok.com", "tiktokcdn.com", "musical.ly", "bytedance.com"]) || matchesAnyFragment(value, ["tiktok", "tiktokcdn", "bytedance"])) return AppType.TIKTOK;
+  if (matchesAnyDomain(value, ["spotify.com", "scdn.co"]) || matchesAnyFragment(value, ["spotify"])) return AppType.SPOTIFY;
+  if (matchesAnyDomain(value, ["zoom.us"]) || matchesAnyFragment(value, ["zoom"])) return AppType.ZOOM;
+  if (matchesAnyDomain(value, ["discord.com", "discordapp.com"]) || matchesAnyFragment(value, ["discord", "discordapp"])) return AppType.DISCORD;
+  if (matchesAnyDomain(value, ["github.com", "githubusercontent.com"]) || matchesAnyFragment(value, ["github", "githubusercontent"])) return AppType.GITHUB;
+  if (matchesAnyDomain(value, ["cloudflare.com"]) || matchesAnyFragment(value, ["cloudflare"])) return AppType.CLOUDFLARE;
 
   return AppType.HTTPS;
 }

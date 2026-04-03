@@ -52,6 +52,7 @@ class DPIEngine {
     this.readerDone = false;
     this.finalizeSent = false;
     this.workerDispatchStats = { total_received: 0, total_dispatched: 0 };
+    this.workerPerFPDispatched = [];
   }
 
   initialize() {
@@ -154,6 +155,7 @@ class DPIEngine {
       this.pendingWorkerPackets += 1;
       this.workerDispatchStats.total_received += 1;
       this.workerDispatchStats.total_dispatched += 1;
+      this.workerPerFPDispatched[workerIndex] += 1;
 
       this.fpWorkers[workerIndex].postMessage({ type: "job", job });
     }
@@ -181,6 +183,7 @@ class DPIEngine {
     this.workerDispatchStats = { total_received: 0, total_dispatched: 0 };
 
     const totalFPs = this.config.num_load_balancers * this.config.fps_per_lb;
+    this.workerPerFPDispatched = new Array(totalFPs).fill(0);
     const workerFile = path.join(__dirname, "fp_worker.js");
     const rulesState = this.ruleManager.toJSON();
 
@@ -401,6 +404,18 @@ class DPIEngine {
     if (this.config.use_worker_threads) {
       lines.push(`LB Received: ${this.workerDispatchStats.total_received}`);
       lines.push(`LB Dispatched: ${this.workerDispatchStats.total_dispatched}`);
+      lines.push("THREAD STATISTICS:");
+
+      for (let lb = 0; lb < this.config.num_load_balancers; lb++) {
+        const start = lb * this.config.fps_per_lb;
+        const end = start + this.config.fps_per_lb;
+        const lbDispatched = this.workerPerFPDispatched.slice(start, end).reduce((sum, value) => sum + value, 0);
+        lines.push(`  LB${lb} dispatched: ${lbDispatched}`);
+      }
+
+      for (let fp = 0; fp < this.workerPerFPDispatched.length; fp++) {
+        lines.push(`  FP${fp} processed: ${this.workerPerFPDispatched[fp]}`);
+      }
     } else if (this.lbManager) {
       const lbStats = this.lbManager.getAggregatedStats();
       lines.push(`LB Received: ${lbStats.total_received}`);
@@ -444,27 +459,39 @@ class DPIEngine {
   generateClassificationReport() {
     if (this.config.use_worker_threads) {
       const appCounts = new Map();
+      const packetAppCounts = new Map();
+      const detectedDomains = new Map();
       let totalClassified = 0;
       let totalUnknown = 0;
 
       for (const part of this.fpWorkerClassification) {
         totalClassified += part.totalClassified;
         totalUnknown += part.totalUnknown;
+
         for (const [app, count] of Object.entries(part.appCounts)) {
           appCounts.set(app, (appCounts.get(app) ?? 0) + count);
+        }
+
+        for (const [app, count] of Object.entries(part.packetAppCounts ?? {})) {
+          packetAppCounts.set(app, (packetAppCounts.get(app) ?? 0) + count);
+        }
+
+        for (const [domain, app] of part.detectedDomains ?? []) {
+          if (!detectedDomains.has(domain)) detectedDomains.set(domain, app);
         }
       }
 
       const total = totalClassified + totalUnknown;
       const classifiedPct = total > 0 ? ((100 * totalClassified) / total).toFixed(1) : "0.0";
       const unknownPct = total > 0 ? ((100 * totalUnknown) / total).toFixed(1) : "0.0";
+      const totalPackets = [...packetAppCounts.values()].reduce((sum, value) => sum + value, 0);
 
       const lines = [];
       lines.push("\n=== APPLICATION CLASSIFICATION REPORT ===");
       lines.push(`Total Connections: ${total}`);
       lines.push(`Classified: ${totalClassified} (${classifiedPct}%)`);
       lines.push(`Unidentified: ${totalUnknown} (${unknownPct}%)`);
-      lines.push("Application Distribution:");
+      lines.push("Application Distribution (Connections):");
 
       const sortedApps = [...appCounts.entries()].sort((a, b) => b[1] - a[1]);
       for (const [app, count] of sortedApps) {
@@ -472,10 +499,41 @@ class DPIEngine {
         lines.push(`- ${appTypeToString(app)}: ${count} (${pct}%)`);
       }
 
+      lines.push("\nApplication Breakdown (Packets):");
+      const sortedPacketApps = [...packetAppCounts.entries()].sort((a, b) => b[1] - a[1]);
+      for (const [app, count] of sortedPacketApps) {
+        const pct = totalPackets > 0 ? ((100 * count) / totalPackets).toFixed(1) : "0.0";
+        lines.push(`- ${appTypeToString(app)}: ${count} (${pct}%)`);
+      }
+
+      lines.push("\nDetected Domains/SNIs:");
+      const sortedDomains = [...detectedDomains.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [domain, app] of sortedDomains) {
+        lines.push(`- ${domain} -> ${appTypeToString(app)}`);
+      }
+
       return `${lines.join("\n")}\n`;
     }
 
-    return this.fpManager ? this.fpManager.generateClassificationReport() : "";
+    if (!this.fpManager) return "";
+
+    const baseReport = this.fpManager.generateClassificationReport().trimEnd();
+    const packetSummary = this.fpManager.getPacketClassificationSummary();
+    const lines = [baseReport, "", "Application Breakdown (Packets):"];
+
+    const sortedPacketApps = [...packetSummary.appCounts.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [app, count] of sortedPacketApps) {
+      const pct = packetSummary.totalPackets > 0 ? ((100 * count) / packetSummary.totalPackets).toFixed(1) : "0.0";
+      lines.push(`- ${appTypeToString(app)}: ${count} (${pct}%)`);
+    }
+
+    lines.push("", "Detected Domains/SNIs:");
+    const sortedDomains = [...packetSummary.detectedDomains.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    for (const [domain, app] of sortedDomains) {
+      lines.push(`- ${domain} -> ${appTypeToString(app)}`);
+    }
+
+    return `${lines.join("\n")}\n`;
   }
 
   getStats() {

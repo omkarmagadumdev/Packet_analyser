@@ -14,6 +14,8 @@ class FastPathProcessor {
     this.packetsDropped = 0;
     this.sniExtractions = 0;
     this.classificationHits = 0;
+    this.packetAppCounts = new Map();
+    this.detectedDomains = new Map();
   }
 
   process(job) {
@@ -32,13 +34,27 @@ class FastPathProcessor {
     this.connTracker.updateConnection(conn, job.data.length, true);
 
     if (job.tuple.protocol === 6) this.updateTCPState(conn, job.tcp_flags);
-    if (conn.state === ConnectionState.BLOCKED) return PacketAction.DROP;
+    if (conn.state === ConnectionState.BLOCKED) {
+      this.recordPacketClassification(conn);
+      return PacketAction.DROP;
+    }
 
     if (this.shouldInspectConnection(conn) && job.payload_length > 0) {
       this.inspectPayload(job, conn);
     }
 
-    return this.checkRules(job, conn);
+    const action = this.checkRules(job, conn);
+    this.recordPacketClassification(conn);
+    return action;
+  }
+
+  recordPacketClassification(conn) {
+    const appType = conn?.app_type ?? AppType.UNKNOWN;
+    this.packetAppCounts.set(appType, (this.packetAppCounts.get(appType) ?? 0) + 1);
+
+    if (conn?.sni && !this.detectedDomains.has(conn.sni)) {
+      this.detectedDomains.set(conn.sni, conn.app_type ?? AppType.UNKNOWN);
+    }
   }
 
   inspectPayload(job, conn) {
@@ -103,7 +119,10 @@ class FastPathProcessor {
 
   checkRules(job, conn) {
     if (!this.ruleManager) return PacketAction.FORWARD;
-    const blockReason = this.ruleManager.shouldBlock(job.tuple.src_ip, job.tuple.dst_port, conn.app_type, conn.sni);
+    const isDnsPacket = job.tuple.dst_port === 53 || job.tuple.src_port === 53;
+    const appForRules = isDnsPacket ? AppType.DNS : conn.app_type;
+    const domainForRules = isDnsPacket ? "" : conn.sni;
+    const blockReason = this.ruleManager.shouldBlock(job.tuple.src_ip, job.tuple.dst_port, appForRules, domainForRules);
     if (!blockReason) return PacketAction.FORWARD;
 
     this.connTracker.blockConnection(conn);
@@ -141,7 +160,9 @@ class FastPathProcessor {
       packets_dropped: this.packetsDropped,
       connections_tracked: this.connTracker.getActiveCount(),
       sni_extractions: this.sniExtractions,
-      classification_hits: this.classificationHits
+      classification_hits: this.classificationHits,
+      packet_app_counts: Object.fromEntries(this.packetAppCounts.entries()),
+      detected_domains: [...this.detectedDomains.entries()]
     };
   }
 
@@ -214,6 +235,31 @@ class FPManager {
     }
 
     return `${lines.join("\n")}\n`;
+  }
+
+  getPacketClassificationSummary() {
+    const appCounts = new Map();
+    const detectedDomains = new Map();
+    let totalPackets = 0;
+
+    for (const fp of this.fps) {
+      const fpStats = fp.getStats();
+      totalPackets += fpStats.packets_processed;
+
+      for (const [app, count] of Object.entries(fpStats.packet_app_counts ?? {})) {
+        appCounts.set(app, (appCounts.get(app) ?? 0) + count);
+      }
+
+      for (const [domain, app] of fpStats.detected_domains ?? []) {
+        if (!detectedDomains.has(domain)) detectedDomains.set(domain, app);
+      }
+    }
+
+    return {
+      totalPackets,
+      appCounts,
+      detectedDomains
+    };
   }
 }
 
