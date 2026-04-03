@@ -368,6 +368,14 @@ class DPIEngine {
     if (this.ruleManager) this.ruleManager.unblockDomain(domain);
   }
 
+  blockPort(port) {
+    if (this.ruleManager) this.ruleManager.blockPort(port);
+  }
+
+  unblockPort(port) {
+    if (this.ruleManager) this.ruleManager.unblockPort(port);
+  }
+
   loadRules(filename) {
     return this.ruleManager ? this.ruleManager.loadRules(filename) : false;
   }
