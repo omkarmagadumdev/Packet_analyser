@@ -12,8 +12,10 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  color: #162223;
-  background: #eef2e4;
+  color: #e5eefb;
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 28%),
+    linear-gradient(180deg, #07111f 0%, #0b1628 45%, #0f172a 100%);
   font-family: var(--font-title), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
