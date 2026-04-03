@@ -49,6 +49,10 @@ function statsCards(stats = {}) {
   ];
 }
 
+function dropReasonEntries(stats = {}) {
+  return Object.entries(stats.drop_reason_counts ?? {}).sort((a, b) => b[1] - a[1]);
+}
+
 export default function Home() {
   const [pcapFile, setPcapFile] = useState(null);
   const [blockIps, setBlockIps] = useState("");
@@ -66,6 +70,8 @@ export default function Home() {
   const [result, setResult] = useState(null);
 
   const cards = useMemo(() => statsCards(result?.stats), [result]);
+  const dropReasons = useMemo(() => dropReasonEntries(result?.stats), [result]);
+  const dropSamples = result?.stats?.drop_samples ?? [];
 
   function toggleApp(app) {
     setSelectedApps((prev) => {
@@ -279,6 +285,43 @@ export default function Home() {
                 </button>
                 {result.downloadWarning ? <p className={styles.warning}>{result.downloadWarning}</p> : null}
               </div>
+
+              {(dropReasons.length > 0 || dropSamples.length > 0) ? (
+                <section className={styles.insightCard}>
+                  <div className={styles.insightHeader}>
+                    <div>
+                      <p className={styles.eyebrow}>Policy Insights</p>
+                      <h3>Drop Reasons</h3>
+                    </div>
+                    <span className={styles.insightTotal}>{result.stats?.dropped_packets ?? 0} dropped</span>
+                  </div>
+
+                  {dropReasons.length > 0 ? (
+                    <div className={styles.reasonGrid}>
+                      {dropReasons.map(([reason, count]) => (
+                        <article key={reason} className={styles.reasonTile}>
+                          <span>{reason}</span>
+                          <strong>{count}</strong>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {dropSamples.length > 0 ? (
+                    <div className={styles.sampleSection}>
+                      <p className={styles.sampleTitle}>Sample blocked matches</p>
+                      <ul className={styles.sampleList}>
+                        {dropSamples.map((sample, index) => (
+                          <li key={`${sample.type}-${sample.detail}-${index}`}>
+                            <span className={styles.sampleType}>{sample.type}</span>
+                            <code>{sample.detail}</code>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
               <div className={styles.reportBox}>
                 <h3>DPI Stats Report</h3>

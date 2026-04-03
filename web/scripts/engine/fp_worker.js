@@ -38,7 +38,9 @@ function buildClassificationSnapshot() {
     appCounts: Object.fromEntries(appCounts.entries()),
     totalClassified,
     totalUnknown,
-    topDomains: [...domainCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)
+    topDomains: [...domainCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20),
+    dropReasonCounts: fp.getStats().drop_reason_counts,
+    dropSamples: fp.getStats().drop_samples
   };
 }
 

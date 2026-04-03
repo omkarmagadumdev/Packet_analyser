@@ -32,6 +32,8 @@ class ConnectionTracker {
   getOrCreateConnection(tuple) {
     const key = tupleKey(tuple);
     if (this.connections.has(key)) return this.connections.get(key);
+    const reverse = tupleKey(reverseTuple(tuple));
+    if (this.connections.has(reverse)) return this.connections.get(reverse);
     if (this.connections.size >= this.maxConnections) this.evictOldest();
 
     const now = Date.now();

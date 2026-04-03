@@ -5,7 +5,8 @@
   "main": "src/main_dpi.js",
   "scripts": {
     "start:dpi": "node src/main_dpi.js",
-    "start:parser": "node src/main_simple.js"
+    "start:parser": "node src/main_simple.js",
+    "test": "node --test test/*.test.js"
   },
   "license": "UNLICENSED"
 }

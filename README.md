@@ -888,6 +888,12 @@ npm install
 node src/main_dpi.js ../test_dpi.pcap ../output_js.pcap
 ```
 
+**Run automated tests:**
+```bash
+cd js
+npm test
+```
+
 ### Running
 
 **Basic usage:**
@@ -924,53 +930,31 @@ python3 generate_test_pcap.py
 ### Sample Output
 
 ```
-╔══════════════════════════════════════════════════════════════╗
-║              DPI ENGINE v2.0 (Multi-threaded)                 ║
-╠══════════════════════════════════════════════════════════════╣
-║ Load Balancers:  2    FPs per LB:  2    Total FPs:  4        ║
-╚══════════════════════════════════════════════════════════════╝
+=== DPI ENGINE STATISTICS ===
+Total Packets: 77
+Forwarded: 69
+Dropped: 8
+Drop Rate: 10.39%
+Active Connections: 37
+Drop Reasons:
+  APP: 2
+  DOMAIN: 1
+  IP: 5
+Sample Drop Details:
+  APP: YouTube
+  DOMAIN: www.facebook.com
+  IP: 192.168.1.50
 
-[Rules] Blocked app: YouTube
-[Rules] Blocked IP: 192.168.1.50
+=== APPLICATION CLASSIFICATION REPORT ===
+Total Connections: 37
+Classified: 22 (59.5%)
+Unidentified: 15 (40.5%)
 
-[Reader] Processing packets...
-[Reader] Done reading 77 packets
-
-╔══════════════════════════════════════════════════════════════╗
-║                      PROCESSING REPORT                        ║
-╠══════════════════════════════════════════════════════════════╣
-║ Total Packets:                77                              ║
-║ Total Bytes:                5738                              ║
-║ TCP Packets:                  73                              ║
-║ UDP Packets:                   4                              ║
-╠══════════════════════════════════════════════════════════════╣
-║ Forwarded:                    69                              ║
-║ Dropped:                       8                              ║
-╠══════════════════════════════════════════════════════════════╣
-║ THREAD STATISTICS                                             ║
-║   LB0 dispatched:             53                              ║
-║   LB1 dispatched:             24                              ║
-║   FP0 processed:              53                              ║
-║   FP1 processed:               0                              ║
-║   FP2 processed:               0                              ║
-║   FP3 processed:              24                              ║
-╠══════════════════════════════════════════════════════════════╣
-║                   APPLICATION BREAKDOWN                       ║
-╠══════════════════════════════════════════════════════════════╣
-║ HTTPS                39  50.6% ##########                     ║
-║ Unknown              16  20.8% ####                           ║
-║ YouTube               4   5.2% # (BLOCKED)                    ║
-║ DNS                   4   5.2% #                              ║
-║ Facebook              3   3.9%                                ║
-║ ...                                                           ║
-╚══════════════════════════════════════════════════════════════╝
-
-[Detected Domains/SNIs]
-  - www.youtube.com → YouTube
-  - www.facebook.com → Facebook
-  - www.google.com → Google
-  - github.com → GitHub
-  ...
+Detected Domains/SNIs:
+- www.youtube.com -> YouTube
+- www.facebook.com -> Facebook
+- www.google.com -> Google
+- github.com -> GitHub
 ```
 
 ### What Each Section Means
@@ -983,6 +967,7 @@ python3 generate_test_pcap.py
 | Forwarded | Packets written to output file |
 | Dropped | Packets blocked (not written) |
 | Thread Statistics | Work distribution across threads |
+| Drop Reasons | Why packets were blocked (IP, app, domain, or port) |
 | Application Breakdown | Traffic classification results |
 | Detected SNIs | Actual domain names found |
 

@@ -16,36 +16,43 @@ class FastPathProcessor {
     this.classificationHits = 0;
     this.packetAppCounts = new Map();
     this.detectedDomains = new Map();
+    this.dropReasonCounts = new Map();
+    this.dropSamples = [];
   }
 
   process(job) {
     this.packetsProcessed += 1;
-    const action = this.processPacket(job);
-    if (this.outputCallback) this.outputCallback(job, action);
+    const result = this.processPacket(job);
+    const action = result.action;
+    if (this.outputCallback) this.outputCallback(job, action, result.blockReason);
 
-    if (action === PacketAction.DROP) this.packetsDropped += 1;
-    else this.packetsForwarded += 1;
+    if (action === PacketAction.DROP) {
+      this.packetsDropped += 1;
+      this.recordDropReason(result.blockReason);
+    } else {
+      this.packetsForwarded += 1;
+    }
 
     return action;
   }
 
   processPacket(job) {
     const conn = this.connTracker.getOrCreateConnection(job.tuple);
-    this.connTracker.updateConnection(conn, job.data.length, true);
+    this.connTracker.updateConnection(conn, job.data.length, this.isOutboundPacket(conn, job.tuple));
 
     if (job.tuple.protocol === 6) this.updateTCPState(conn, job.tcp_flags);
     if (conn.state === ConnectionState.BLOCKED) {
       this.recordPacketClassification(conn);
-      return PacketAction.DROP;
+      return { action: PacketAction.DROP, blockReason: conn.block_reason ?? null };
     }
 
     if (this.shouldInspectConnection(conn) && job.payload_length > 0) {
       this.inspectPayload(job, conn);
     }
 
-    const action = this.checkRules(job, conn);
+    const result = this.checkRules(job, conn);
     this.recordPacketClassification(conn);
-    return action;
+    return result;
   }
 
   recordPacketClassification(conn) {
@@ -118,15 +125,37 @@ class FastPathProcessor {
   }
 
   checkRules(job, conn) {
-    if (!this.ruleManager) return PacketAction.FORWARD;
+    if (!this.ruleManager) return { action: PacketAction.FORWARD, blockReason: null };
     const isDnsPacket = job.tuple.dst_port === 53 || job.tuple.src_port === 53;
     const appForRules = isDnsPacket ? AppType.DNS : conn.app_type;
     const domainForRules = isDnsPacket ? "" : conn.sni;
     const blockReason = this.ruleManager.shouldBlock(job.tuple.src_ip, job.tuple.dst_port, appForRules, domainForRules);
-    if (!blockReason) return PacketAction.FORWARD;
+    if (!blockReason) return { action: PacketAction.FORWARD, blockReason: null };
 
+    conn.block_reason = blockReason;
     this.connTracker.blockConnection(conn);
-    return PacketAction.DROP;
+    return { action: PacketAction.DROP, blockReason };
+  }
+
+  isOutboundPacket(conn, tuple) {
+    if (!conn?.tuple) return true;
+    return conn.tuple.src_ip === tuple.src_ip &&
+      conn.tuple.dst_ip === tuple.dst_ip &&
+      conn.tuple.src_port === tuple.src_port &&
+      conn.tuple.dst_port === tuple.dst_port &&
+      conn.tuple.protocol === tuple.protocol;
+  }
+
+  recordDropReason(blockReason) {
+    if (!blockReason?.type) return;
+    this.dropReasonCounts.set(blockReason.type, (this.dropReasonCounts.get(blockReason.type) ?? 0) + 1);
+
+    if (this.dropSamples.length < 10) {
+      this.dropSamples.push({
+        type: blockReason.type,
+        detail: blockReason.detail ?? ""
+      });
+    }
   }
 
   shouldInspectConnection(conn) {
@@ -162,7 +191,9 @@ class FastPathProcessor {
       sni_extractions: this.sniExtractions,
       classification_hits: this.classificationHits,
       packet_app_counts: Object.fromEntries(this.packetAppCounts.entries()),
-      detected_domains: [...this.detectedDomains.entries()]
+      detected_domains: [...this.detectedDomains.entries()],
+      drop_reason_counts: Object.fromEntries(this.dropReasonCounts.entries()),
+      drop_samples: this.dropSamples
     };
   }
 
@@ -192,7 +223,9 @@ class FPManager {
       total_processed: 0,
       total_forwarded: 0,
       total_dropped: 0,
-      total_connections: 0
+      total_connections: 0,
+      drop_reason_counts: new Map(),
+      drop_samples: []
     };
     for (const fp of this.fps) {
       const fpStats = fp.getStats();
@@ -200,6 +233,13 @@ class FPManager {
       stats.total_forwarded += fpStats.packets_forwarded;
       stats.total_dropped += fpStats.packets_dropped;
       stats.total_connections += fpStats.connections_tracked;
+      for (const [reason, count] of Object.entries(fpStats.drop_reason_counts ?? {})) {
+        stats.drop_reason_counts.set(reason, (stats.drop_reason_counts.get(reason) ?? 0) + count);
+      }
+      for (const sample of fpStats.drop_samples ?? []) {
+        if (stats.drop_samples.length >= 10) break;
+        stats.drop_samples.push(sample);
+      }
     }
     return stats;
   }

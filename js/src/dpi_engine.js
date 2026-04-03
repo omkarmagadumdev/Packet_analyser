@@ -387,6 +387,34 @@ class DPIEngine {
     return this.ruleManager ? this.ruleManager.saveRules(filename) : false;
   }
 
+  getDropDiagnostics() {
+    const counts = new Map();
+    const samples = [];
+
+    if (this.config.use_worker_threads) {
+      for (const stats of this.fpWorkerFinalStats) {
+        for (const [reason, count] of Object.entries(stats.drop_reason_counts ?? {})) {
+          counts.set(reason, (counts.get(reason) ?? 0) + count);
+        }
+        for (const sample of stats.drop_samples ?? []) {
+          if (samples.length >= 10) break;
+          samples.push(sample);
+        }
+      }
+    } else if (this.fpManager) {
+      const aggregated = this.fpManager.getAggregatedStats();
+      for (const [reason, count] of aggregated.drop_reason_counts.entries()) {
+        counts.set(reason, (counts.get(reason) ?? 0) + count);
+      }
+      samples.push(...aggregated.drop_samples.slice(0, 10));
+    }
+
+    return {
+      counts,
+      samples
+    };
+  }
+
   generateReport() {
     const lines = [];
     lines.push("\n=== DPI ENGINE STATISTICS ===");
@@ -451,6 +479,20 @@ class DPIEngine {
       lines.push(`Blocked Apps: ${ruleStats.blocked_apps}`);
       lines.push(`Blocked Domains: ${ruleStats.blocked_domains}`);
       lines.push(`Blocked Ports: ${ruleStats.blocked_ports}`);
+    }
+
+    const dropDiagnostics = this.getDropDiagnostics();
+    if (dropDiagnostics.counts.size > 0) {
+      lines.push("Drop Reasons:");
+      for (const [reason, count] of [...dropDiagnostics.counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        lines.push(`  ${reason}: ${count}`);
+      }
+    }
+    if (dropDiagnostics.samples.length > 0) {
+      lines.push("Sample Drop Details:");
+      for (const sample of dropDiagnostics.samples) {
+        lines.push(`  ${sample.type}: ${sample.detail}`);
+      }
     }
 
     return `${lines.join("\n")}\n`;
@@ -537,7 +579,12 @@ class DPIEngine {
   }
 
   getStats() {
-    return { ...this.stats };
+    const dropDiagnostics = this.getDropDiagnostics();
+    return {
+      ...this.stats,
+      drop_reason_counts: Object.fromEntries(dropDiagnostics.counts.entries()),
+      drop_samples: dropDiagnostics.samples
+    };
   }
 
   printStatus() {
