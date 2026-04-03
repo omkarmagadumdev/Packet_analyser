@@ -7,6 +7,9 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   turbopack: {
     root: dirname
+  },
+  outputFileTracingIncludes: {
+    "/api/dpi/process/route": ["./scripts/**/*.js"]
   }
 };
 

@@ -20,7 +20,7 @@ async function main() {
       blockPorts = []
     } = payload;
 
-    const engineFile = path.resolve(__dirname, "..", "..", "js", "src", "dpi_engine.js");
+    const engineFile = path.resolve(__dirname, "engine", "dpi_engine.js");
     const { DPIEngine } = require(engineFile);
 
     const engine = new DPIEngine(config);
